@@ -45,7 +45,7 @@ variable "key_name" {
 variable "project_name" {
   description = "Nombre del proyecto para etiquetas"
   type        = string
-  default     = "tienda-perritos"
+  default     = "proyecto-despacho"
 }
 
 # ============================================================
