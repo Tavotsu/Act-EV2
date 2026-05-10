@@ -6,7 +6,7 @@ services:
     container_name: mysql_db
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
@@ -15,9 +15,7 @@ services:
       - app_network
 
   backend-ventas:
-    build:
-      context: ./back-Ventas_SpringBoot
-      dockerfile: Dockerfile
+    image: ${ECR_REGISTRY}/backend-ventas:latest
     container_name: backend_ventas
     restart: always
     environment:
@@ -25,17 +23,14 @@ services:
       - DB_PORT=3306
       - DB_NAME=ventas
       - DB_USERNAME=root
-      - DB_PASSWORD=rootpassword
+      - DB_PASSWORD=${DB_PASSWORD}
     depends_on:
       - db
     networks:
       - app_network
-    # Expose to internal network only
 
   backend-despachos:
-    build:
-      context: ./back-Despachos_SpringBoot
-      dockerfile: Dockerfile
+    image: ${ECR_REGISTRY}/backend-despachos:latest
     container_name: backend_despachos
     restart: always
     environment:
@@ -43,17 +38,14 @@ services:
       - DB_PORT=3306
       - DB_NAME=despachos
       - DB_USERNAME=root
-      - DB_PASSWORD=rootpassword
+      - DB_PASSWORD=${DB_PASSWORD}
     depends_on:
       - db
     networks:
       - app_network
-    # Expose to internal network only
 
   frontend:
-    build:
-      context: ./front_despacho
-      dockerfile: Dockerfile
+    image: ${ECR_REGISTRY}/frontend-despachos:latest
     container_name: frontend_app
     restart: always
     ports:
