@@ -1,6 +1,7 @@
 name: CI/CD Backend Ventas
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - deploy
