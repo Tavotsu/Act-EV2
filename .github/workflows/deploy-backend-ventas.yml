@@ -1,0 +1,50 @@
+name: CI/CD Backend Ventas
+
+on:
+  push:
+    branches:
+      - deploy
+    paths:
+      - 'back-Ventas_SpringBoot/**'
+      - '.github/workflows/deploy-backend-ventas.yml'
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login en Amazon ECR (runner)
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build y Push Backend Ventas
+        run: |
+          cd back-Ventas_SpringBoot
+          docker build -t backend-ventas .
+          docker tag backend-ventas:latest ${{ steps.login-ecr.outputs.registry }}/backend-ventas:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/backend-ventas:latest
+
+      - name: Desplegar Backend Ventas en EC2 App
+        run: |
+          aws ssm send-command \
+            --instance-ids ${{ secrets.EC2_BACKEND_INSTANCE_ID }} \
+            --document-name "AWS-RunShellScript" \
+            --comment "Desplegar Backend Ventas" \
+            --parameters '{"commands":[
+              "set -e",
+              "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}",
+              "docker pull ${{ steps.login-ecr.outputs.registry }}/backend-ventas:latest",
+              "docker stop backend_ventas || true",
+              "docker rm backend_ventas || true",
+              "docker run -d --name backend_ventas --restart always -p 80:8080 -e DB_ENDPOINT=${{ secrets.DATA_PRIVATE_IP }} -e DB_PORT=3306 -e DB_NAME=ventas -e DB_USERNAME=root -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ steps.login-ecr.outputs.registry }}/backend-ventas:latest"
+            ]}'

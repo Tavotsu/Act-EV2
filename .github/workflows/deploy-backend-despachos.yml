@@ -1,0 +1,50 @@
+name: CI/CD Backend Despachos
+
+on:
+  push:
+    branches:
+      - deploy
+    paths:
+      - 'back-Despachos_SpringBoot/**'
+      - '.github/workflows/deploy-backend-despachos.yml'
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login en Amazon ECR (runner)
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build y Push Backend Despachos
+        run: |
+          cd back-Despachos_SpringBoot
+          docker build -t backend-despachos .
+          docker tag backend-despachos:latest ${{ steps.login-ecr.outputs.registry }}/backend-despachos:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/backend-despachos:latest
+
+      - name: Desplegar Backend Despachos en EC2 App
+        run: |
+          aws ssm send-command \
+            --instance-ids ${{ secrets.EC2_BACKEND_INSTANCE_ID }} \
+            --document-name "AWS-RunShellScript" \
+            --comment "Desplegar Backend Despachos" \
+            --parameters '{"commands":[
+              "set -e",
+              "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}",
+              "docker pull ${{ steps.login-ecr.outputs.registry }}/backend-despachos:latest",
+              "docker stop backend_despachos || true",
+              "docker rm backend_despachos || true",
+              "docker run -d --name backend_despachos --restart always -p 3001:8081 -e DB_ENDPOINT=${{ secrets.DATA_PRIVATE_IP }} -e DB_PORT=3306 -e DB_NAME=despachos -e DB_USERNAME=root -e DB_PASSWORD=${{ secrets.DB_PASSWORD }} ${{ steps.login-ecr.outputs.registry }}/backend-despachos:latest"
+            ]}'

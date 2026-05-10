@@ -1,0 +1,50 @@
+name: CI/CD Frontend
+
+on:
+  push:
+    branches:
+      - deploy
+    paths:
+      - 'front_despacho/**'
+      - '.github/workflows/deploy-frontend.yml'
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v3
+
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login en Amazon ECR (runner)
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build y Push Frontend
+        run: |
+          cd front_despacho
+          docker build -t frontend-despachos .
+          docker tag frontend-despachos:latest ${{ steps.login-ecr.outputs.registry }}/frontend-despachos:latest
+          docker push ${{ steps.login-ecr.outputs.registry }}/frontend-despachos:latest
+
+      - name: Desplegar Frontend en EC2 Web
+        run: |
+          aws ssm send-command \
+            --instance-ids ${{ secrets.EC2_FRONTEND_INSTANCE_ID }} \
+            --document-name "AWS-RunShellScript" \
+            --comment "Desplegar Frontend" \
+            --parameters '{"commands":[
+              "set -e",
+              "aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}",
+              "docker pull ${{ steps.login-ecr.outputs.registry }}/frontend-despachos:latest",
+              "docker stop frontend_app || true",
+              "docker rm frontend_app || true",
+              "docker run -d --name frontend_app --restart always -p 80:8080 -e BACKEND_IP=${{ secrets.APP_PRIVATE_IP }} ${{ steps.login-ecr.outputs.registry }}/frontend-despachos:latest"
+            ]}'
